@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-multipart
+PyPDF2
+python-magic
+pydantic
+motor
+pymongo
+python-dotenv
+minio
+pika
+Pillow
+httpx
+pydantic-settings
+python-magic
