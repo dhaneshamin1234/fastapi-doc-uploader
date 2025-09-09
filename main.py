@@ -18,6 +18,8 @@ from app.messaging import connect_to_rabbitmq, close_rabbitmq_connection, publis
 import math
 import uvicorn
 
+#test ci push
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
