@@ -19,6 +19,7 @@ import math
 import uvicorn
 
 #test ci push
+#test ci pull
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
