@@ -8,8 +8,11 @@ motor
 pymongo
 python-dotenv
 minio
-pika
+# pika
 Pillow
 httpx
 pydantic-settings
 python-magic
+aio-pika
+celery
+kombu 

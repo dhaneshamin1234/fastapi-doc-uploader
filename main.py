@@ -14,9 +14,11 @@ from app.storage import connect_to_storage, close_storage_connection, get_object
 from app.services import DocumentService
 from app.config import settings
 from app.storage import storage
-from app.messaging import connect_to_rabbitmq, close_rabbitmq_connection, publish_event
+# from app.messaging import connect_to_rabbitmq, close_rabbitmq_connection, publish_event
+from app.messaging import rabbitmq_publisher
 import math
 import uvicorn
+from app.tasks import process_document
 
 #test ci push
 #test ci pull
@@ -33,14 +35,18 @@ async def lifespan(app: FastAPI):
     connect_to_storage()
     # Initialize RabbitMQ
     try:
-        connect_to_rabbitmq()
+        await rabbitmq_publisher.connect()
     except Exception:
-        logger.warning("RabbitMQ connection failed; event publishing will be disabled until available")
+        logger.warning("RabbitMQ connection failed; event publishing will be disabled.")
+
     yield
-    # Shutdown
+
     await close_mongo_connection()
     close_storage_connection()
-    close_rabbitmq_connection()
+    try:
+        await rabbitmq_publisher.close()
+    except Exception:
+        pass
 
 # Create FastAPI app
 app = FastAPI(
@@ -91,6 +97,14 @@ async def health_check():
             dependencies["minio"] = "disconnected"
     except Exception as e:
         dependencies["minio"] = f"error: {str(e)}"
+
+    try:
+        if rabbitmq_publisher.connection and not rabbitmq_publisher.connection.is_closed:
+            dependencies["rabbitmq"] = "healthy"
+        else:
+            dependencies["rabbitmq"] = "disconnected"
+    except Exception as e:
+        dependencies["rabbitmq"] = f"error: {str(e)}"
     
     # Overall status
     overall_status = "healthy" if all(
@@ -139,17 +153,14 @@ async def upload_document(file: UploadFile = File(...)):
         
         # Publish event (best-effort)
         try:
-            publish_event(
-                event_type="document.uploaded",
-                payload={
-                    "document_id": document.document_id,
-                    "filename": document.filename,
-                    "mime_type": document.mime_type,
-                    "storage_key": document.storage_key,
-                    "bucket": document.storage_bucket,
-                    "uploaded_at": document.upload_timestamp.isoformat(),
-                }
-            )
+            process_document.delay({
+                "document_id": document.document_id,
+                "filename": document.filename,
+                "mime_type": document.mime_type,
+                "storage_key": document.storage_key,
+                "bucket": document.storage_bucket,
+                "uploaded_at": document.upload_timestamp.isoformat(),
+            })
         except Exception as e:
             logger.warning(f"Failed to publish event: {e}")
         

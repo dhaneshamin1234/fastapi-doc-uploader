@@ -59,6 +59,12 @@ class DocumentMetadata(BaseModel):
         arbitrary_types_allowed = True
         json_encoders = {ObjectId: str}
 
+    def model_dump(self, **kwargs):
+        data = super().model_dump(**kwargs)
+        if "_id" in data and isinstance(data["_id"], ObjectId):
+            data["_id"] = str(data["_id"])
+        return data
+
 class DocumentResponse(BaseModel):
     document_id: str
     filename: str
