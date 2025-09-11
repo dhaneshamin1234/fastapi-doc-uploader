@@ -16,3 +16,7 @@ python-magic
 aio-pika
 celery
 kombu 
+pytest
+pytest-asyncio
+anyio
+requests

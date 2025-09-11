@@ -11,10 +11,15 @@ import os
 import math
 
 class DocumentService:
-    
+    """Business logic for creating, retrieving and managing documents."""
+
     @staticmethod
     async def create_document(file_content: bytes, filename: str, content_type: str) -> DocumentMetadata:
-        """Create and store a new document"""
+        """Create and store a new document.
+
+        Validates file size and type, persists metadata, and uploads content
+        to object storage when available.
+        """
         
         # Validate file size
         if len(file_content) > settings.MAX_FILE_SIZE:
@@ -79,7 +84,7 @@ class DocumentService:
     
     @staticmethod
     async def get_document(document_id: str) -> Optional[DocumentMetadata]:
-        """Get document by ID"""
+        """Get a document by its public `document_id`. Returns None if not found."""
         db = await get_database()
         doc_data = await db.documents.find_one({"document_id": document_id})
         
@@ -92,7 +97,7 @@ class DocumentService:
     
     @staticmethod
     async def list_documents(page: int = 1, per_page: int = 10) -> Tuple[List[DocumentMetadata], int]:
-        """List documents with pagination"""
+        """List documents with pagination. Returns (items, total_count)."""
         db = await get_database()
         
         # Calculate skip value
@@ -115,7 +120,7 @@ class DocumentService:
     
     @staticmethod
     async def delete_document(document_id: str) -> bool:
-        """Delete document"""
+        """Delete a document and associated stored file (best-effort)."""
         db = await get_database()
         
         # Get document first to delete file

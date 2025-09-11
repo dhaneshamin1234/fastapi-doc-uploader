@@ -11,17 +11,17 @@ import PyPDF2
 from app.config import settings
 
 def generate_document_id() -> str:
-    """Generate a unique document ID using UUID4"""
+    """Generate a unique document ID using UUID4."""
     return str(uuid.uuid4())
 
 def calculate_file_hash(file_content: bytes) -> str:
-    """Calculate SHA-256 hash of file content"""
+    """Calculate SHA-256 hash of the provided file content."""
     return hashlib.sha256(file_content).hexdigest()
 
 def validate_file_type(filename: str, mime_type: str) -> Tuple[bool, str]:
     """
-    Validate file type based on extension and MIME type
-    Returns (is_valid, error_message)
+    Validate file type based on extension and MIME type.
+    Returns a tuple of (is_valid, error_message).
     """
     file_ext = Path(filename).suffix.lower()
     
@@ -34,14 +34,14 @@ def validate_file_type(filename: str, mime_type: str) -> Tuple[bool, str]:
     return True, ""
 
 def detect_mime_type(file_content: bytes, fallback: str = None) -> str:
-    """Detect MIME type of file content"""
+    """Detect MIME type of file content, with optional fallback."""
     try:
         return magic.from_buffer(file_content, mime=True)
     except:
         return fallback or 'application/octet-stream'
 
 def save_file(document_id: str, filename: str, file_content: bytes) -> str:
-    """Save file to disk and return file path"""
+    """Save file to disk and return absolute file path."""
     safe_filename = f"{document_id}_{filename}"
     file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
     
@@ -51,7 +51,7 @@ def save_file(document_id: str, filename: str, file_content: bytes) -> str:
     return file_path
 
 def process_pdf_file(file_content: bytes) -> Dict[str, Any]:
-    """Process PDF file and extract metadata"""
+    """Process a PDF file and extract basic metadata and preview text."""
     try:
         pdf_reader = PyPDF2.PdfReader(BytesIO(file_content))
         page_count = len(pdf_reader.pages)
@@ -85,7 +85,7 @@ def process_pdf_file(file_content: bytes) -> Dict[str, Any]:
         }
 
 def process_text_file(file_content: bytes) -> Dict[str, Any]:
-    """Process text file and extract metadata"""
+    """Process a UTF-8 text file and extract basic metadata and preview."""
     try:
         text_content = file_content.decode('utf-8')
         
@@ -109,7 +109,7 @@ def process_text_file(file_content: bytes) -> Dict[str, Any]:
         }
 
 def process_json_file(file_content: bytes) -> Dict[str, Any]:
-    """Process JSON file and extract metadata"""
+    """Process a JSON file and extract basic metadata and preview."""
     try:
         json_data = json.loads(file_content.decode('utf-8'))
         
@@ -142,7 +142,7 @@ def process_json_file(file_content: bytes) -> Dict[str, Any]:
         }
 
 def process_file_content(filename: str, file_content: bytes) -> Dict[str, Any]:
-    """Process file content based on file type"""
+    """Dispatch processing based on file extension (pdf, txt, json)."""
     file_ext = Path(filename).suffix.lower()
     
     if file_ext == '.pdf':
@@ -155,7 +155,7 @@ def process_file_content(filename: str, file_content: bytes) -> Dict[str, Any]:
         return {"content_preview": "Unsupported file type"}
 
 def format_file_size(size_bytes: int) -> str:
-    """Format file size in human readable format"""
+    """Format a file size into a human-readable string (B, KB, MB, GB)."""
     if size_bytes < 1024:
         return f"{size_bytes} B"
     elif size_bytes < 1024**2:

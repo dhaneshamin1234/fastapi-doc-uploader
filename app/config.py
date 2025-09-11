@@ -25,6 +25,14 @@ class Settings:
     # API
     API_VERSION: str = "1.0.0"
     API_TITLE: str = "Document Upload API"
+    API_CONTACT: dict = {
+        "name": os.getenv("API_CONTACT_NAME", "API Support"),
+        "email": os.getenv("API_CONTACT_EMAIL", "support@example.com"),
+    }
+    API_LICENSE: dict = {
+        "name": os.getenv("API_LICENSE_NAME", "MIT"),
+        "url": os.getenv("API_LICENSE_URL", "https://opensource.org/licenses/MIT"),
+    }
 
     # MinIO / S3-compatible storage
     STORAGE_PROVIDER: str = os.getenv("STORAGE_PROVIDER", "minio")
@@ -39,6 +47,10 @@ class Settings:
     RABBITMQ_EXCHANGE: str = os.getenv("RABBITMQ_EXCHANGE", "document_events")
     RABBITMQ_QUEUE: str = os.getenv("RABBITMQ_QUEUE", "document_processing")
     RABBITMQ_ROUTING_KEY: str = os.getenv("RABBITMQ_ROUTING_KEY", "document.process")
+
+    # Testing / Runtime toggles
+    DISABLE_EXTERNAL_CONNECTIONS: bool = os.getenv("DISABLE_EXTERNAL_CONNECTIONS", "false").lower() == "true"
+    LOG_REQUESTS: bool = os.getenv("LOG_REQUESTS", "true").lower() == "true"
     
     def __init__(self):
         # Ensure upload directory exists
