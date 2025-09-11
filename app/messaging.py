@@ -1,59 +1,49 @@
 import json
 import logging
-import pika
+import aio_pika
 from typing import Optional
 from app.config import settings
+from aio_pika import Message, DeliveryMode, ExchangeType
 
 logger = logging.getLogger(__name__)
 
 
-class RabbitMQClient:
-    connection: Optional[pika.BlockingConnection] = None
-    channel: Optional[pika.adapters.blocking_connection.BlockingChannel] = None
+class AioRabbitMQPublisher:
+    def __init__(self):
+        self.connection = None
+        self.channel = None
+        self.exchange = None
 
-
-mq = RabbitMQClient()
-
-
-def connect_to_rabbitmq():
-    try:
-        params = pika.URLParameters(settings.RABBITMQ_URL)
-        mq.connection = pika.BlockingConnection(params)
-        mq.channel = mq.connection.channel()
-        # Declare exchange and queue, and bind
-        mq.channel.exchange_declare(exchange=settings.RABBITMQ_EXCHANGE, exchange_type='topic', durable=True)
-        mq.channel.queue_declare(queue=settings.RABBITMQ_QUEUE, durable=True)
-        mq.channel.queue_bind(queue=settings.RABBITMQ_QUEUE, exchange=settings.RABBITMQ_EXCHANGE, routing_key=settings.RABBITMQ_ROUTING_KEY)
-        logger.info("Connected to RabbitMQ and declared topology")
-    except Exception as exc:
-        logger.error(f"Failed to connect to RabbitMQ: {exc}")
-        raise
-
-
-def close_rabbitmq_connection():
-    try:
-        if mq.channel and mq.channel.is_open:
-            mq.channel.close()
-        if mq.connection and mq.connection.is_open:
-            mq.connection.close()
-    except Exception:
-        pass
-
-
-def publish_event(event_type: str, payload: dict):
-    if not mq.channel or not mq.channel.is_open:
-        raise RuntimeError("RabbitMQ channel not initialized")
-    message = {
-        "type": event_type,
-        "payload": payload,
-    }
-    body = json.dumps(message).encode('utf-8')
-    mq.channel.basic_publish(
-        exchange=settings.RABBITMQ_EXCHANGE,
-        routing_key=settings.RABBITMQ_ROUTING_KEY,
-        body=body,
-        properties=pika.BasicProperties(
-            delivery_mode=2  # persistent
+    async def connect(self):
+        self.connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        self.channel = await self.connection.channel()
+        self.exchange = await self.channel.declare_exchange(
+            name=settings.RABBITMQ_EXCHANGE,
+            type=ExchangeType.TOPIC,
+            durable=True,
         )
-    )
+        logger.info("Connected to RabbitMQ (aio_pika)")
+
+    async def close(self):
+        if self.connection:
+            await self.connection.close()
+
+    async def publish_event(self, event_type: str, payload: dict):
+        if not self.exchange:
+            raise RuntimeError("RabbitMQ exchange not initialized")
+
+        message = Message(
+            body=json.dumps({
+                "type": event_type,
+                "payload": payload
+            }).encode(),
+            delivery_mode=DeliveryMode.PERSISTENT,
+        )
+
+        await self.exchange.publish(
+            message,
+            routing_key=settings.RABBITMQ_ROUTING_KEY,
+        )
+
+rabbitmq_publisher = AioRabbitMQPublisher()
 

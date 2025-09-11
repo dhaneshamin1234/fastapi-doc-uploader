@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     telnet \
     net-tools \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

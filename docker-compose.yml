@@ -14,9 +14,12 @@ services:
     volumes:
       - ./uploads:/app/uploads
     depends_on:
-      - mongodb
-      - minio
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
@@ -36,6 +39,11 @@ services:
       - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # MinIO Object Storage
@@ -53,6 +61,11 @@ services:
     command: server /data --console-address ":9001"
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   # RabbitMQ Message Broker
@@ -69,6 +82,27 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
       - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping && timeout 1 bash -c '</dev/tcp/localhost/5672'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Celery Worker for Background Tasks
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: celery_worker
+    command: ["celery", "-A", "celery_worker", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     networks:
       - app-network
     restart: unless-stopped
