@@ -17,6 +17,7 @@ storage = ObjectStorage()
 
 
 def connect_to_storage():
+    """Initialize MinIO client and ensure bucket exists."""
     try:
         storage.client = Minio(
             settings.MINIO_ENDPOINT,
@@ -37,7 +38,7 @@ def connect_to_storage():
 
 
 def close_storage_connection():
-    # Minio client doesn't maintain open sockets that need closing explicitly
+    """MinIO client does not require explicit close; placeholder for symmetry."""
     pass
 
 

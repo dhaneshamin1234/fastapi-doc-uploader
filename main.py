@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, status, Query
+from fastapi import FastAPI, File, UploadFile, HTTPException, status, Query, Request
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -30,31 +30,47 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await connect_to_mongo()
-    # Initialize MinIO
-    connect_to_storage()
-    # Initialize RabbitMQ
-    try:
-        await rabbitmq_publisher.connect()
-    except Exception:
-        logger.warning("RabbitMQ connection failed; event publishing will be disabled.")
+    if not settings.DISABLE_EXTERNAL_CONNECTIONS:
+        await connect_to_mongo()
+        # Initialize MinIO
+        connect_to_storage()
+        # Initialize RabbitMQ
+        try:
+            await rabbitmq_publisher.connect()
+        except Exception:
+            logger.warning("RabbitMQ connection failed; event publishing will be disabled.")
 
     yield
 
-    await close_mongo_connection()
-    close_storage_connection()
-    try:
-        await rabbitmq_publisher.close()
-    except Exception:
-        pass
+    if not settings.DISABLE_EXTERNAL_CONNECTIONS:
+        await close_mongo_connection()
+        close_storage_connection()
+        try:
+            await rabbitmq_publisher.close()
+        except Exception:
+            pass
 
-# Create FastAPI app
+# Create FastAPI app with richer OpenAPI metadata
 app = FastAPI(
     title=settings.API_TITLE,
     description="RESTful API for uploading and managing documents (PDF, TXT, JSON) with MongoDB storage",
     version=settings.API_VERSION,
+    contact=settings.API_CONTACT,
+    license_info=settings.API_LICENSE,
     lifespan=lifespan
 )
+
+# Add request logging middleware (conditional)
+if settings.LOG_REQUESTS:
+    @app.middleware("http")
+    async def log_requests(request: Request, call_next):
+        start_time = datetime.utcnow()
+        response = await call_next(request)
+        duration_ms = int((datetime.utcnow() - start_time).total_seconds() * 1000)
+        logger.info(
+            f"HTTP {request.method} {request.url.path} -> {response.status_code} in {duration_ms}ms"
+        )
+        return response
 
 # Add CORS middleware
 app.add_middleware(
@@ -66,7 +82,12 @@ app.add_middleware(
 )
 
 # Health Check Endpoint
-@app.get("/health", response_model=HealthResponse)
+@app.get(
+    "/health",
+    response_model=HealthResponse,
+    tags=["Health"],
+    summary="Health check",
+)
 async def health_check():
     """
     Health check endpoint - returns service status and dependencies
@@ -119,7 +140,19 @@ async def health_check():
     )
 
 # Document Upload Endpoint
-@app.post("/documents", response_model=UploadResponse)
+@app.post(
+    "/documents",
+    response_model=UploadResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Documents"],
+    summary="Upload a document",
+    responses={
+        201: {"description": "Document uploaded and processed"},
+        400: {"model": ErrorResponse, "description": "Validation error"},
+        413: {"model": ErrorResponse, "description": "Payload too large"},
+        500: {"model": ErrorResponse, "description": "Server error"},
+    },
+)
 async def upload_document(file: UploadFile = File(...)):
     """
     Upload a document (PDF, TXT, or JSON)
@@ -170,8 +203,9 @@ async def upload_document(file: UploadFile = File(...)):
             document=doc_response
         )
         
-    except HTTPException:
-        raise
+    except HTTPException as exc:
+        # Let FastAPI's HTTPException handler handle
+        raise exc
     except Exception as e:
         logger.error(f"Error uploading document: {str(e)}")
         raise HTTPException(
@@ -180,7 +214,16 @@ async def upload_document(file: UploadFile = File(...)):
         )
 
 # Document Retrieval Endpoints
-@app.get("/documents", response_model=DocumentListResponse)
+@app.get(
+    "/documents",
+    response_model=DocumentListResponse,
+    tags=["Documents"],
+    summary="List documents",
+    responses={
+        200: {"description": "Paginated list of documents"},
+        500: {"model": ErrorResponse, "description": "Server error"},
+    },
+)
 async def list_documents(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(10, ge=1, le=100, description="Items per page")
@@ -229,7 +272,16 @@ async def list_documents(
             detail=f"Error retrieving documents: {str(e)}"
         )
 
-@app.get("/documents/{document_id}", response_model=DocumentResponse)
+@app.get(
+    "/documents/{document_id}",
+    response_model=DocumentResponse,
+    tags=["Documents"],
+    summary="Get document by ID",
+    responses={
+        200: {"description": "Document details"},
+        404: {"model": ErrorResponse, "description": "Not found"},
+    },
+)
 async def get_document(document_id: str):
     """
     Get specific document details by ID
@@ -257,7 +309,15 @@ async def get_document(document_id: str):
         content_preview=document.content_preview
     )
 
-@app.get("/documents/{document_id}/download")
+@app.get(
+    "/documents/{document_id}/download",
+    tags=["Documents"],
+    summary="Download original document",
+    responses={
+        200: {"description": "File stream"},
+        404: {"model": ErrorResponse, "description": "Not found"},
+    },
+)
 async def download_document(document_id: str):
     """
     Download original file by document ID
@@ -303,6 +363,7 @@ async def download_document(document_id: str):
 # Error handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request, exc):
+    """Uniform HTTP error response handler."""
     return JSONResponse(
         status_code=exc.status_code,
         content=ErrorResponse(
@@ -314,6 +375,7 @@ async def http_exception_handler(request, exc):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
+    """Fallback handler for unhandled exceptions."""
     logger.error(f"Unhandled exception: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

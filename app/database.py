@@ -12,7 +12,7 @@ class MongoDB:
 mongodb = MongoDB()
 
 async def connect_to_mongo():
-    """Create database connection"""
+    """Create database connection."""
     try:
         mongodb.client = AsyncIOMotorClient(settings.MONGODB_URL)
         mongodb.database = mongodb.client[settings.DATABASE_NAME]
@@ -28,18 +28,18 @@ async def connect_to_mongo():
         raise
 
 async def close_mongo_connection():
-    """Close database connection"""
+    """Close database connection."""
     if mongodb.client:
         mongodb.client.close()
         logger.info("Disconnected from MongoDB")
 
 async def get_database():
-    """Get database instance"""
+    """Get database instance."""
     return mongodb.database
 
 
 async def ensure_indexes():
-    """Create required indexes for collections"""
+    """Create required indexes for collections."""
     db = mongodb.database
     if db is None:
         return
